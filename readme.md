@@ -1,103 +1,76 @@
-# Task CRUD API (SQLite Persistence Engine)
+# Task CRUD API (PostgreSQL + Docker Compose)
 
-A RESTful CRUD API built with Python and FastAPI for managing tasks. Built for Week 3 of the FlyRank AI Fluency backend track to demonstrate migrating from an in-memory storage array to an embedded SQLite database (`tasks.db`) while keeping external API endpoints completely unchanged.
+A RESTful CRUD API built with FastAPI and containerized with Docker & PostgreSQL. Built for Week 3 Assignment 3 of the FlyRank AI Fluency backend track to demonstrate storage swapping (**In-Memory → SQLite → PostgreSQL in Docker**) while keeping HTTP routes strictly unchanged.
 
 ---
 
-## How to Run Locally
+## How to Launch the Full Stack
 
 ### Prerequisites
 
-* Python 3.10+
-* `pip` package manager
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 
-### 1. Install Dependencies
+### 1. Environment Setup
 
-```bash
-pip install fastapi uvicorn pydantic
-```
-
-### 2. Start the Server
+Copy `.env.example` to create your local `.env` file:
 
 ```bash
-python -m uvicorn main:app --reload
+cp .env.example .env
 ```
 
-* **Base Service URL:** `http://127.0.0.1:8000`
-* **Interactive Documentation (Swagger UI):** `http://127.0.0.1:8000/docs`
+### 2. Run Single Command Stack Launch
+
+```bash
+docker compose up --build
+```
+
+* **Base Service URL:** `http://localhost:8000`
+* **Interactive Swagger Documentation:** `http://localhost:8000/docs`
 
 ---
 
-## API Endpoints Matrix
+## Architectural Integrity
 
-| Method | Endpoint      | Description                                              | Expected Request Body                | Success Status   | Error Status                       |
-| ------ | ------------- | -------------------------------------------------------- | ------------------------------------ | ---------------- | ---------------------------------- |
-| GET    | `/`           | API Metadata & Storage Engine Info                       | None                                 | `200 OK`         | -                                  |
-| GET    | `/health`     | Server Pulse & Database Connection Check                 | None                                 | `200 OK`         | -                                  |
-| GET    | `/stats`      | Task Statistics via SQL `COUNT()`                        | None                                 | `200 OK`         | -                                  |
-| GET    | `/tasks`      | List Tasks (Supports `done` & `search` query parameters) | None                                 | `200 OK`         | -                                  |
-| GET    | `/tasks/{id}` | Fetch Single Task Record by ID                           | None                                 | `200 OK`         | `404 Not Found`                    |
-| POST   | `/tasks`      | Create Task Record (SQL `INSERT`)                        | `{"title": "Buy groceries"}`         | `201 Created`    | `400 Bad Request`                  |
-| PUT    | `/tasks/{id}` | Update Task Record (SQL `UPDATE`)                        | `{"title": "Updated", "done": true}` | `200 OK`         | `400 Bad Request`, `404 Not Found` |
-| DELETE | `/tasks/{id}` | Delete Task Record (SQL `DELETE`)                        | None                                 | `204 No Content` | `404 Not Found`                    |
+As per assignment constraints, **routes and service handlers in `main.py` remained 100% unchanged**.
+
+Only the repository persistence layer (`database.py`) was modified to execute parameterized SQL against a containerized PostgreSQL instance.
 
 ---
 
-## SQLite Database Engine Integration
+## Proof of Data Persistence Across Container Restarts
 
-### Storage Architecture
-
-* **Database Engine:** Embedded SQLite3
-* **Database File:** `tasks.db` (automatically generated on application startup)
-* **Table Schema Definition:**
-
-```sql
-CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    done BOOLEAN NOT NULL DEFAULT 0
-);
-```
-
-### Key Architectural Rationale
-
-SQLite is a serverless, zero-configuration relational database engine that stores all data directly in a single disk file (`tasks.db`). By integrating Python's native `sqlite3` module, application state now persists across process terminations and server restarts without altering the consumer-facing REST contract.
-
-### Direct SQL Exploration (Stage 4 Analysis)
-
-Verified via DB Browser for SQLite:
-
-* **Fetch All Records:** `SELECT * FROM tasks;`
-* **Filter Completed Tasks:** `SELECT * FROM tasks WHERE done = 1;`
-* **Aggregate Task Count:** `SELECT COUNT(*) FROM tasks;`
-* **Bulk Complete All:** `UPDATE tasks SET done = 1;`
-* **Delete Completed:** `DELETE FROM tasks WHERE done = 1;`
-
----
-
-## Terminal Verification (`curl -i`)
-
-A task was created successfully using `curl`:
+### 1. Insert Record via `curl`
 
 ```bash
-curl -i -X POST http://127.0.0.1:8000/tasks \
+curl -i -X POST http://localhost:8000/tasks \
   -H "Content-Type: application/json" \
-  -d '{"title":"Persistent DB Task"}'
+  -d '{"title":"Docker Volume Persistence Test"}'
 ```
 
-Expected response:
+**Response ID:** `4`
 
-```text
-HTTP/1.1 201 Created
-date: Sun, 16 Aug 2026 19:30:00 GMT
-server: uvicorn
-content-type: application/json
+---
+
+### 2. Destroy Containers
+
+```bash
+docker compose down
 ```
 
-```json
-{
-  "id": 1,
-  "title": "Persistent DB Task",
-  "done": false
-}
+---
+
+### 3. Re-launch Containers
+
+```bash
+docker compose up -d
 ```
+
+---
+
+### 4. Verify Data Retrieval Post-Restart
+
+```bash
+curl -i http://localhost:8000/tasks/4
+```
+
+**Outcome:** Returns task `4` with status `200 OK`. Data persisted safely inside the named Docker volume `postgres_data`.
